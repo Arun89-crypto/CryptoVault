@@ -14,20 +14,20 @@ contract CryptoVault is Ownable {
 
     // * Address of tokens
     address public ETH_ADDRESS_TESTNET =
-        0x7c1ed097af300c85f3e9aaf51a15de5c967f828e; // 1
+        0x0000000000000000000000000000000000000000; // 1
     address public WBTC_ADDRESS_TESTNET =
-        0xc04b0d3107736c32e19f1c62b2af67be61d63a05; // 2
+        0xC04B0d3107736C32e19F1c62b2aF67BE61d63a05; // 2
     address public LINK_ADDRESS_TESTNET =
-        0x326c977e6efc84e512bb9c30f76e30c160ed06fb; // 3
+        0x326C977E6efc84E512bB9C30f76E30c160eD06FB; // 3
     address public USDT_ADDRESS_TESTNET =
-        0xe802376580c10fe23f027e1e19ed9d54d4c9311e; // 4
+        0xC2C527C0CACF457746Bd31B2a698Fe89de2b6d49; // 4
     address public DAI_ADDRESS_TESTNET =
-        0xdc31ee1784292379fbb2964b3b9c4124d8f89c60; // 5
+        0xdc31Ee1784292379Fbb2964b3B9C4124D8F89C60; // 5
 
     // * Address of price feeds
-    address public ETH_PRICE = 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e; // 101
-    address public WBTC_PRICE = 0xA39434A63A52E749F02807ae27335515BA4b07F7; // 102
-    address public LINK_PRICE = 0x48731cF7e84dc94C5f84577882c14Be11a5B7456; // 102
+    address public ETH_PRICE = 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e; // 1
+    address public WBTC_PRICE = 0xA39434A63A52E749F02807ae27335515BA4b07F7; // 2
+    address public LINK_PRICE = 0x48731cF7e84dc94C5f84577882c14Be11a5B7456; // 3
 
     // * Items struct
     struct Items {
@@ -36,7 +36,7 @@ contract CryptoVault is Ownable {
         uint256 amount;
         uint256 depositedTokenType; // 1 | 2 | 3
         uint256 unlockTimeStamp;
-        bool withdraw;
+        bool withdrawn;
         bool deposited;
         uint256 tokensLoaned;
         uint256 tokenTypeLoaned; // 4 | 5
@@ -107,12 +107,34 @@ contract CryptoVault is Ownable {
             _token.allowance(msg.sender, address(this)) >= _amount,
             "Approve tokens first!"
         );
-        require(msg.value >= _amount, "Unsufficient Balance!");
+        require(
+            IERC20(_token).balanceOf(msg.sender) >= _amount,
+            "Unsufficient Balance!"
+        );
 
-        // Transfering tokens from user to contract
-        _token.safeTransferFrom(msg.sender, address(this), _amount);
-        uint256 price = _getTokenPrice(_outputToken, _amount);
-        _outputToken.transfer(msg.sender, price);
+        // * Transfering tokens User => System
+        if (address(_token) == ETH_ADDRESS_TESTNET) {
+            // for ETH transactions
+            require(msg.value >= _amount, "Unsufficient Native Token balance");
+        } else {
+            require(
+                _token.allowance(msg.sender, address(this)) >= _amount,
+                "Approve tokens first!"
+            );
+            require(
+                IERC20(_token).balanceOf(msg.sender) >= _amount,
+                "Unsufficient Balance!"
+            );
+            _token.safeTransferFrom(msg.sender, address(this), _amount);
+        }
+        uint256 price = _getTokenPrice(_outputTokenType, _amount);
+        // * Transfering tokens System => User
+        if (address(_outputToken) == USDT_ADDRESS_TESTNET) {
+            // USDT has 6 decimal places
+            _outputToken.transfer(msg.sender, price * 10**6);
+        } else {
+            _outputToken.transfer(msg.sender, price * 10**18);
+        }
         // adding the token balance in the wallet of particular address
         walletTokenBalance[address(_token)][msg.sender] = walletTokenBalance[
             address(_token)
@@ -123,13 +145,16 @@ contract CryptoVault is Ownable {
         lockedToken[_id].withdrawer = _withdrawer;
         lockedToken[_id].amount = _amount;
         lockedToken[_id].depositedTokenType = _depositedTokenType;
-        lockedToken[_id].unlockTimestamp = _unlockTimestamp;
+        lockedToken[_id].unlockTimeStamp = _unlockTimestamp;
         lockedToken[_id].withdrawn = false;
         lockedToken[_id].deposited = true;
-        lockedToken[_id].tokensLoaned = price;
+        if (address(_outputToken) == tokenAddresses[4]) {
+            // USDT has 6 decimal places
+            lockedToken[_id].tokensLoaned = price * 10**6;
+        } else {
+            lockedToken[_id].tokensLoaned = price * 10**18;
+        }
         lockedToken[_id].tokenTypeLoaned = _outputTokenType;
-
-        BalanceOfVault[_depositedTokenType] += _amount;
 
         depositsByTokenAddress[address(_token)].push(_id);
         depositsByWithdrawers[_withdrawer].push(_id);
@@ -137,13 +162,12 @@ contract CryptoVault is Ownable {
     }
 
     /// @dev Function to get the latest price of the token in USD
-    /// @param _tokenAddress address of the token
+    /// @param _tokenType address of the token
     /// @param _amount amount of the tokens deposited
     function _getTokenPrice(uint256 _tokenType, uint256 _amount)
         private
         returns (uint256)
     {
-        address aggregatorAddress;
         priceFeed = AggregatorV3Interface(tokenPriceFeedAddresses[_tokenType]);
         (, int256 answer, , , ) = priceFeed.latestRoundData();
         uint256 _price = uint256(answer * 10000000000);
@@ -152,9 +176,9 @@ contract CryptoVault is Ownable {
 
     /// @dev Function to withdraw the vault tokens
     /// @param _id ID of the vault
-    function withdrawTokens(uint256 _id) external {
+    function withdrawTokens(uint256 _id) external payable {
         require(
-            block.timestamp >= lockedToken[_id].unlockTimestamp,
+            block.timestamp >= lockedToken[_id].unlockTimeStamp,
             "Tokens are still locked!"
         );
         require(
@@ -168,8 +192,16 @@ contract CryptoVault is Ownable {
             "You are not allowed to with draw to the tokens!"
         );
         require(
-            IERC20(tokenAddresses[lockedToken[_id].tokenTypeLoaned]) >=
-                lockedToken[_id].amount,
+            IERC20(tokenAddresses[lockedToken[_id].tokenTypeLoaned]).allowance(
+                msg.sender,
+                address(this)
+            ) >= lockedToken[_id].tokensLoaned,
+            "You need to approve the loaned token!"
+        );
+        require(
+            IERC20(tokenAddresses[lockedToken[_id].tokenTypeLoaned]).balanceOf(
+                msg.sender
+            ) >= lockedToken[_id].tokensLoaned,
             "You don't have enough balances to unlock your vault!"
         );
 
@@ -185,19 +217,26 @@ contract CryptoVault is Ownable {
 
         IERC20(tokenAddresses[lockedToken[_id].tokenTypeLoaned]).transfer(
             address(this),
-            lockedToken[_id].amount
+            lockedToken[_id].tokensLoaned
         );
 
         // * Transfering funds from System => User
 
-        IERC20(tokenAddresses[lockedToken[_id].depositedTokenType])
-            .safeTransferFrom(
-                msg.sender,
-                address(this),
-                lockedToken[_id].amount
+        if (lockedToken[_id].depositedTokenType == 1) {
+            (bool success, ) = msg.sender.call{value: lockedToken[_id].amount}(
+                ""
             );
+            require(success, "transaction failed");
+        } else {
+            IERC20(tokenAddresses[lockedToken[_id].depositedTokenType])
+                .safeTransferFrom(
+                    msg.sender,
+                    address(this),
+                    lockedToken[_id].amount
+                );
+        }
 
-        emit Withdraw(msg.sender, lockedToken[_id].amount);
+        emit tokensWithdrawn(msg.sender, lockedToken[_id].amount);
     }
 
     function getDepositsByTokenAddress(address _id)
