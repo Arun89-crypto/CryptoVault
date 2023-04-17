@@ -19,6 +19,7 @@ User : 500 XYZ (2 VLTK = 1 XYZ)
 User : 1000 STABLECOIN (Asset returned by vault in exchange of the deposits as stable crypto)
 
 Time T2 (after sometime) :
+
 ------------------------
 
 User : 1000 STABLECOIN (Asset submitted to vault to get the deposited assets back which have higher value now)
@@ -54,4 +55,16 @@ The Vault supports ETH network and soon will support Cross chain.
 
 # Address of price feeds
 ETH_PRICE_FEED = 0x694AA1769357215DE4FAC081bf1f309aDC325306 
+```
+
+## Screenshots
+
+<img src="./docs/1.png"></img>
+
+## How to run
+
+```sh
+cd frontend
+yarn
+yarn dev
 ```
