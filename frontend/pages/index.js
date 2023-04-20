@@ -4,6 +4,7 @@ import MainContainer from "../Components/MainContainer";
 import { WalletProvider } from "../contexts/WalletContext";
 import { ComponentContextProvider } from "../contexts/ComponentContext";
 import { InteractContextProvider } from "../contexts/InteractContext";
+import Head from "next/head";
 
 export default function Home() {
     return (
@@ -11,6 +12,9 @@ export default function Home() {
             <InteractContextProvider>
                 <WalletProvider>
                     <main className="flex flex-col">
+                        <Head>
+                            <title>Hyper | Vault</title>
+                        </Head>
                         <Navbar />
                         <MainContainer />
                     </main>
